@@ -5,7 +5,8 @@ from .models import *
 admin.site.register(Town)
 admin.site.register(District)
 admin.site.register(Merchant)
-# admin.site.register(MerchantPoint)
+admin.site.register(Customer)
+admin.site.register(Comment)
 
 @admin.register(MerchantPoint)
 class MerchantPoint(OSMGeoAdmin):

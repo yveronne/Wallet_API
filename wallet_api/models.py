@@ -5,18 +5,23 @@
 #   * Make sure each ForeignKey has `on_delete` set to the desired behavior.
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
+from django import forms
 from django.contrib.gis.db import models
 
-LOG_ACTION = (
+LOG_ACTIONS = (
     ("Connexion", "Connexion"),
     ("Déconnexion", "Déconnexion"),
     ("Ouverture", "Ouverture"),
     ("Fermeture", "Fermeture")
 )
-TRANSACTION_TYPE = (
+TRANSACTION_TYPES = (
     ("Dépôt", "Dépôt"),
     ("Retrait", "Retrait"),
     ("Paiement", "Paiement")
+)
+GENDERS = (
+    ('M', 'Masculin'),
+    ('F', 'Féminin')
 )
 
 
@@ -48,10 +53,7 @@ class District(models.Model):
 class Merchant(models.Model):
     lastname = models.CharField(max_length=60)
     firstname = models.CharField(max_length=60, blank=True, null=True)
-    gender = models.CharField(max_length=1, choices=(
-        ('M', 'Masculin'),
-        ('F', 'Féminin')
-    ), null=True)
+    gender = models.CharField(max_length=1, choices=GENDERS, null=True)
     cninumber = models.CharField(max_length=10)
     cniexpirationdate = models.DateField()
     phonenumber = models.CharField(max_length=9)
@@ -72,7 +74,7 @@ class MerchantPoint(models.Model):
     area = models.CharField(max_length=200)
     position = models.PointField()
     isopen = models.BooleanField(blank=True, null=True)
-    balance = models.DecimalField(max_digits=65535, decimal_places=65535, blank=True, null=True)
+    balance = models.DecimalField(max_digits=19, decimal_places=5, null=True)
     district = models.ForeignKey(District, models.DO_NOTHING, db_column='districtid')
     merchant = models.ForeignKey(Merchant, models.DO_NOTHING, db_column='merchantid')
 
@@ -89,15 +91,18 @@ class Customer(models.Model):
     phonenumber = models.CharField(primary_key=True, max_length=9)
     lastname = models.CharField(max_length=60)
     firstname = models.CharField(max_length=60, blank=True, null=True)
-    gender = models.CharField(max_length=1, blank=True, null=True)
+    gender = models.CharField(max_length=1, choices=GENDERS, null=True)
     cninumber = models.CharField(max_length=10)
     cniexpirationdate = models.DateField()
     secret = models.CharField(max_length=6)
-    balance = models.DecimalField(max_digits=65535, decimal_places=65535, blank=True, null=True)
+    balance = models.DecimalField(max_digits=19, decimal_places=5, null=True)
 
     class Meta:
         managed = False
         db_table = 'customers'
+
+    def __str__(self):
+        return self.lastname
 
 
 
@@ -106,7 +111,7 @@ class Comment(models.Model):
     title = models.TextField(blank=True, null=True)
     content = models.TextField(blank=True, null=True)
     customernumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='customernumber')
-    merchantpointid = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
+    merchantpoint = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
 
     class Meta:
         managed = False
@@ -116,7 +121,7 @@ class Comment(models.Model):
 
 class ConnectionLog(models.Model):
     merchantpointid = models.IntegerField()
-    action = models.TextField(choices=LOG_ACTION)
+    action = models.TextField(choices=LOG_ACTIONS)
     date = models.DateTimeField()
 
     class Meta:
@@ -150,9 +155,9 @@ class Otp(models.Model):
 
 
 class Transaction(models.Model):
-    date = models.DateTimeField()
-    type = models.TextField(choices=TRANSACTION_TYPE)
-    isvalidated = models.BooleanField(blank=True, null=True)
+    date = models.DateTimeField(auto_now_add=True)
+    type = models.TextField(choices=TRANSACTION_TYPES)
+    isvalidated = models.BooleanField(default=False)
     expectedvalidationdate = models.DateField()
     validationdate = models.DateTimeField()
     beneficiaryid = models.IntegerField()
@@ -166,11 +171,11 @@ class Transaction(models.Model):
 
 
 class WaitingLine(models.Model):
-    date = models.DateTimeField()
+    date = models.DateTimeField(auto_now_add=True)
     customernumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='customernumber')
-    merchantpointid = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
+    merchantpoint = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
     wasserved = models.BooleanField()
-    servicedate = models.DateTimeField()
+    servicedate = models.DateTimeField(null=True)
 
     class Meta:
         managed = False
