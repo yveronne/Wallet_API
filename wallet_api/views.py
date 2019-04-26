@@ -28,7 +28,7 @@ class MerchantPointsList(mixins.ListModelMixin, generics.GenericAPIView):
 
 
 
-class OpenOrCloseMerchantPoint(generics.UpdateAPIView): #todo logs
+class OpenOrCloseMerchantPoint(generics.UpdateAPIView):
     def get_queryset(self):
         queryset = MerchantPoint.objects.all()
         return queryset
@@ -41,10 +41,11 @@ class OpenOrCloseMerchantPoint(generics.UpdateAPIView): #todo logs
 class CommentCreation(generics.CreateAPIView):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
+    permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
         customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
-        merchant_point = get_object_or_404(MerchantPoint, id=self.request.data.get('merchantpointid')) #todo customize error messages
+        merchant_point = get_object_or_404(MerchantPoint, id=self.request.data.get('merchantpointid'))  # todo customize error messages
         return serializer.save(customernumber=customer, merchantpoint=merchant_point)
 
 
@@ -73,7 +74,7 @@ class WaitingLineView(generics.ListCreateAPIView):
         merchant_point = get_object_or_404(MerchantPoint, id=self.args[0])
         customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
         if serializer.is_valid():
-            if check_password(self.request.data.get('secret'), customer.secret):
+            if check_password(self.request.data.get('secret').replace(" ",""), customer.secret):
                 serializer.save(customernumber=customer, merchantpoint=merchant_point, wasserved=False)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             else:
@@ -81,9 +82,6 @@ class WaitingLineView(generics.ListCreateAPIView):
                 return Response(content, status=status.HTTP_404_NOT_FOUND)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#todo ne pas oublier de retirer les espaces du secret au niveau du mot de passe (le secret)
-#todo rôles (le marchand qui peut consulter sa liste doit être authentifié; ce n'est pas le cas pour le client qui crée
 
 
 class TransactionView(generics.ListCreateAPIView):
