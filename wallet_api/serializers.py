@@ -38,11 +38,10 @@ class MerchantPointSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    merchantpoint = MerchantPointSerializer()
 
     class Meta:
         model = Comment
-        fields = ('title', 'content', 'customernumber', 'merchantpoint')
+        fields = ('title', 'content', 'customernumber')
 
 
 
