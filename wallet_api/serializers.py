@@ -29,7 +29,7 @@ class MerchantPointSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MerchantPoint
-        fields = ('id', 'name', 'area', 'district', 'position', 'waitingListSize' )
+        fields = ('id', 'name', 'area', 'district', 'isopen', 'position', 'waitingListSize' )
 
     def get_waitinglist_size(self, merchantPoint):
         waitingListSize = merchantPoint.waitingline_set.filter(wasserved=False).count()

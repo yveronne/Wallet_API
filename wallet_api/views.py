@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from .permissions import IsMerchantOrReadOnly
 
 from .serializers import *
 
@@ -27,13 +28,13 @@ class MerchantPointsList(mixins.ListModelMixin, generics.GenericAPIView):
 
 
 
-class OpenOrCloseMerchantPoint(generics.UpdateAPIView):
+class OpenOrCloseMerchantPoint(generics.UpdateAPIView): #todo logs
     def get_queryset(self):
         queryset = MerchantPoint.objects.all()
         return queryset
 
     serializer_class = MerchantPointSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMerchantOrReadOnly]
 
 
 
@@ -84,15 +85,6 @@ class WaitingLineView(generics.ListCreateAPIView):
 #todo ne pas oublier de retirer les espaces du secret au niveau du mot de passe (le secret)
 #todo rôles (le marchand qui peut consulter sa liste doit être authentifié; ce n'est pas le cas pour le client qui crée
 
-class CustomerCreation(generics.CreateAPIView):
-    queryset = Customer.objects.all()
-    serializer_class = CustomerSerializer
-    permission_classes = [AllowAny]
-
-    def perform_create(self, serializer):
-        hashedSecret = make_password(self.request.data.get('secret'))
-        return serializer.save(secret=hashedSecret)
-
 
 class TransactionView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
@@ -108,3 +100,13 @@ class LogoutUserAPIView(APIView):
     def get(self, request, format=None):
         request.user.auth_token.delete()
         return Response(status=status.HTTP_200_OK)
+
+
+class CustomerCreation(generics.CreateAPIView):
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        hashedSecret = make_password(self.request.data.get('secret'))
+        return serializer.save(secret=hashedSecret)
