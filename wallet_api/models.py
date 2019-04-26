@@ -140,29 +140,16 @@ class Otp(models.Model):
         db_table = 'otp'
 
 
-#
-# class SpatialRefSys(models.Model):
-#     srid = models.IntegerField(primary_key=True)
-#     auth_name = models.CharField(max_length=256, blank=True, null=True)
-#     auth_srid = models.IntegerField(blank=True, null=True)
-#     srtext = models.CharField(max_length=2048, blank=True, null=True)
-#     proj4text = models.CharField(max_length=2048, blank=True, null=True)
-#
-#     class Meta:
-#         managed = False
-#         db_table = 'spatial_ref_sys'
-
-
-
 class Transaction(models.Model):
     date = models.DateTimeField(auto_now_add=True)
     type = models.TextField(choices=TRANSACTION_TYPES)
     isvalidated = models.BooleanField(default=False)
     expectedvalidationdate = models.DateField()
     validationdate = models.DateTimeField()
-    beneficiaryid = models.IntegerField()
+    beneficiarynumber = models.IntegerField(db_column='beneficiaryid')
     customernumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='customernumber')
-    merchantpointid = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
+    merchantpoint = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid')
+    otp = models.ForeignKey(Otp, models.DO_NOTHING, db_column='otpcode')
 
     class Meta:
         managed = False
