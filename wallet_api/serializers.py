@@ -19,7 +19,7 @@ class WaitingLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = WaitingLine
-        fields = ('date', 'customernumber')
+        fields = ('id', 'date', 'customernumber')
 
 
 

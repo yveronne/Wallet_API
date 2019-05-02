@@ -13,6 +13,7 @@ urlpatterns = [
     path('comments', views.CommentCreation.as_view()),
     url(r'^merchant/login$', obtain_auth_token, name='auth_user_login'),
     url(r'^merchant/logout$', views.LogoutUserAPIView.as_view(), name='auth_user_logout'),
-    path('customers', views.CustomerCreation.as_view())
+    path('customers', views.CustomerCreation.as_view()),
+    path('waitinglines/<int:pk>', views.WaitingLineServe.as_view())
 ]
 

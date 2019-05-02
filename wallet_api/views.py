@@ -55,7 +55,7 @@ class WaitingLineView(generics.ListCreateAPIView):
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        queryset = WaitingLine.objects.filter(merchantpoint=self.args[0], wasserved=False)
+        queryset = WaitingLine.objects.filter(merchantpoint=self.args[0], wasserved=False).order_by('date').reverse()
         return queryset
 
 
@@ -82,6 +82,17 @@ class WaitingLineView(generics.ListCreateAPIView):
                 return Response(content, status=status.HTTP_404_NOT_FOUND)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WaitingLineServe(generics.UpdateAPIView):
+
+    serializer_class = WaitingLineSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = WaitingLine.objects.all()
+        return queryset
+
 
 
 class TransactionView(generics.ListCreateAPIView):

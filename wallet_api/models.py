@@ -133,6 +133,9 @@ class Comment(models.Model):
         verbose_name = 'Commentaire'
         verbose_name_plural = 'Commentaires'
 
+    def __str__(self):
+        return "%s - %s" % (self.title, self.customernumber)
+
 
 
 class ConnectionLog(models.Model):
