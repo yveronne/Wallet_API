@@ -43,10 +43,30 @@ class CommentCreation(generics.CreateAPIView):
     serializer_class = CommentSerializer
     permission_classes = [AllowAny]
 
-    def perform_create(self, serializer):
-        customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
-        merchant_point = get_object_or_404(MerchantPoint, id=self.request.data.get('merchantpointid'))  # todo customize error messages
-        return serializer.save(customernumber=customer, merchantpoint=merchant_point)
+    # def perform_create(self, serializer):
+    #     customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
+    #
+    #     merchant_point = get_object_or_404(MerchantPoint, id=self.request.data.get('merchantpointid'))  # todo customize error messages
+    #     return serializer.save(customernumber=customer, merchantpoint=merchant_point)
+
+    def create(self, request, *args, **kwargs):
+        try:
+            customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
+        except Customer.DoesNotExist:
+            content = "Ce numéro de téléphone n'existe pas"
+            return Response(content, status=status.HTTP_404_NOT_FOUND)
+        try:
+            merchant_point = MerchantPoint.objects.get(id=self.request.data.get('merchantpointid'))
+        except MerchantPoint.DoesNotExist:
+            content = "Ce point marchand n'existe pas"
+            return Response(content, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = CommentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(customernumber=customer, merchantpoint=merchant_point)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -60,25 +80,26 @@ class WaitingLineView(generics.ListCreateAPIView):
 
 
     # def perform_create(self, serializer): #todo il est déjà dans la file d'attente et pas encore servi
-        # merchant_point = get_object_or_404(MerchantPoint, id=self.args[0])
-        # customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
-        # secret = self.request.data.get('secret')
-        # if check_password(secret, customer.secret):
-        #     return serializer.save(customernumber=customer, merchantpoint=merchant_point, wasserved=False)
-        # else:
-        #     content = {'error' : 'Le mot de passe entré est erroné'}
-        #     return Response(content, status=status.HTTP_404_NOT_FOUND)
 
     def create(self, request, *args, **kwargs):
+        try:
+            customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
+        except Customer.DoesNotExist:
+            content = "Ce numéro de téléphone n'existe pas"
+            return Response(content, status=status.HTTP_404_NOT_FOUND)
+        try:
+            merchant_point = MerchantPoint.objects.get(id=self.args[0])
+        except MerchantPoint.DoesNotExist:
+            content = "Ce point marchand n'existe pas"
+            return Response(content, status=status.HTTP_404_NOT_FOUND)
+
         serializer = WaitingLineSerializer(data=request.data)
-        merchant_point = get_object_or_404(MerchantPoint, id=self.args[0])
-        customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
         if serializer.is_valid():
             if check_password(self.request.data.get('secret').replace(" ",""), customer.secret):
                 serializer.save(customernumber=customer, merchantpoint=merchant_point, wasserved=False)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             else:
-                content = {'error': 'Le mot de passe entré est erroné'}
+                content = "Le mot de passe entré est erroné"
                 return Response(content, status=status.HTTP_404_NOT_FOUND)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
