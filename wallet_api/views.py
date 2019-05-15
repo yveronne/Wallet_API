@@ -43,12 +43,6 @@ class CommentCreation(generics.CreateAPIView):
     serializer_class = CommentSerializer
     permission_classes = [AllowAny]
 
-    # def perform_create(self, serializer):
-    #     customer = get_object_or_404(Customer, phonenumber=self.request.data.get('customernumber'))
-    #
-    #     merchant_point = get_object_or_404(MerchantPoint, id=self.request.data.get('merchantpointid'))  # todo customize error messages
-    #     return serializer.save(customernumber=customer, merchantpoint=merchant_point)
-
     def create(self, request, *args, **kwargs):
         try:
             customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
@@ -80,6 +74,7 @@ class WaitingLineView(generics.ListCreateAPIView):
 
 
     # def perform_create(self, serializer): #todo il est déjà dans la file d'attente et pas encore servi
+    #todo Cas où un client qui n'a pas de compte Wallet vient faire le dépôt
 
     def create(self, request, *args, **kwargs):
         try:
@@ -87,6 +82,7 @@ class WaitingLineView(generics.ListCreateAPIView):
         except Customer.DoesNotExist:
             content = "Ce numéro de téléphone n'existe pas"
             return Response(content, status=status.HTTP_404_NOT_FOUND)
+
         try:
             merchant_point = MerchantPoint.objects.get(id=self.args[0])
         except MerchantPoint.DoesNotExist:
@@ -140,3 +136,152 @@ class CustomerCreation(generics.CreateAPIView):
     def perform_create(self, serializer):
         hashedSecret = make_password(self.request.data.get('secret'))
         return serializer.save(secret=hashedSecret)
+
+
+class TransactionInitiation(generics.CreateAPIView):
+    queryset = Transaction.objects.all()
+    permission_classes = [AllowAny]
+    serializer_class = TransactionSerializer
+
+    def generateOtp(self):
+        from random import randint
+        # OTP generation
+        otp = ""
+        for x in range(7):
+            digit = randint(1, 9)
+            otp += str(digit)
+        return otp
+
+
+
+    def create(self, request, *args, **kwargs):
+        transaction_type = self.request.data.get('type')
+        amount = self.request.data.get('amount')
+        merchantPoint = self.request.data.get('merchantPointID')
+        expectedDate = self.request.data.get('expectedvalidationdate')
+
+        #Calculating expiration date of the otp (expected validation date + 1 hour)
+        from datetime import datetime, timedelta
+        expectie = datetime.strptime(expectedDate, "%Y-%m-%d %H:%M:%S")
+        expirie = expectie + timedelta(hours=1)
+
+        try:
+            merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
+        except MerchantPoint.DoesNotExist:
+            content = "Ce point marchand n'existe pas"
+            return Response(content, status=status.HTTP_404_NOT_FOUND)
+
+        if transaction_type == 'Depot':
+            beneficiaryNumber = self.request.data.get('beneficiaryNumber')
+            try:
+                beneficiary = Customer.objects.get(phonenumber=beneficiaryNumber).replace(" ","")
+            except Customer.DoesNotExist:
+                content = "Le numéro du bénéficiaire entré est introuvable"
+                return Response(content, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = TransactionSerializer(data=request.data)
+            if serializer.is_valid():
+                #Saving OTP
+                while True:
+                    # Generating OTP
+                    code = self.generateOtp()
+                    try:
+                        otpie = Otp.objects.get(code=code)
+                        if otpie.wasverified == True:
+                            otpie.expirationdate = expirie
+                            otpie.save()
+                            break
+                        elif otpie.wasverified == False:
+                            continue
+                    except Otp.DoesNotExist:
+                        otpie = Otp(code=code, expirationdate=expirie)
+                        otpie.save()
+                        break
+
+                serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
+                                expectedvalidationdate=expectedDate, otp=otpie)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        elif (transaction_type == 'Retrait'):
+            secret = self.request.data.get('secret').replace(" ", "")
+            number = self.request.data.get('customerNumber').replace(" ","")
+
+            try:
+                customer = Customer.objects.get(phonenumber=number)
+            except Customer.DoesNotExist:
+                content = "Le numéro de client entré est introuvable"
+                return Response(content, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = TransactionSerializer(data=request.data)
+            if(serializer.is_valid()):
+                if check_password(secret, customer.secret):
+
+                    # Saving OTP
+                    while True:
+                        # Generating OTP
+                        code = self.generateOtp()
+                        try:
+                            otpie = Otp.objects.get(code=code)
+                            if otpie.wasverified == True:
+                                otpie.expirationdate = expirie
+                                otpie.save()
+                                break
+                            elif otpie.wasverified == False:
+                                continue
+                        except Otp.DoesNotExist:
+                            otpie = Otp(code=code, expirationdate=expirie)
+                            otpie.save()
+                            break
+                    serializer.save(type='Retrait', merchantpoint=merchantPoint,
+                                    amount=amount, customernumber=customer.phonenumber,
+                                    expectedvalidationdate=expectedDate, otp=otpie)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                else:
+                    content = "Le mot de passe entré est erroné"
+                    return Response(content, status=status.HTTP_404_NOT_FOUND)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+        elif (transaction_type == 'Paiement'):
+            secret = self.request.data.get('secret').replace(" ", "")
+            number = self.request.data.get('customerNumber').replace(" ","")
+
+            try:
+                customer = Customer.objects.get(phonenumber=number)
+            except Customer.DoesNotExist:
+                content = "Le numéro de client entré est introuvable"
+                return Response(content, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = TransactionSerializer(data=request.data)
+            if (serializer.is_valid()):
+                if check_password(secret, customer.secret):
+
+                    # Saving OTP
+                    while True:
+                        # Generating OTP
+                        code = self.generateOtp()
+                        try:
+                            otpie = Otp.objects.get(code=code)
+                            if otpie.wasverified == True:
+                                otpie.expirationdate = expirie
+                                otpie.save()
+                                break
+                            elif otpie.wasverified == False:
+                                continue
+                        except Otp.DoesNotExist:
+                            otpie = Otp(code=code, expirationdate=expirie)
+                            otpie.save()
+                            break
+                    serializer.save(type='Paiement', merchantpoint=merchantPoint,
+                                    amount=amount, customernumber=customer.phonenumber,
+                                    expectedvalidationdate=expectedDate, otp=otpie)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                else:
+                    content = "Le mot de passe entré est erroné"
+                    return Response(content, status=status.HTTP_404_NOT_FOUND)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -54,4 +54,4 @@ class CustomerSerializer(serializers.ModelSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ('expectedvalidationdate', 'type', 'customernumber')
+        fields = ('type', 'amount', 'expectedvalidationdate')

@@ -5,20 +5,17 @@
 #   * Make sure each ForeignKey has `on_delete` set to the desired behavior.
 #   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
-from django import forms
 from django.contrib.gis.db import models
 from django.contrib.auth.models import User
-from django.forms import ModelForm
-from django.contrib import admin
 
 LOG_ACTIONS = (
     ("Connexion", "Connexion"),
-    ("Déconnexion", "Déconnexion"),
+    ("Deconnexion", "Déconnexion"),
     ("Ouverture", "Ouverture"),
     ("Fermeture", "Fermeture")
 )
 TRANSACTION_TYPES = (
-    ("Dépôt", "Dépôt"),
+    ("Depot", "Dépôt"),
     ("Retrait", "Retrait"),
     ("Paiement", "Paiement")
 )
@@ -163,11 +160,12 @@ class Transaction(models.Model):
     date = models.DateTimeField(auto_now_add=True, verbose_name='Date')
     type = models.TextField(choices=TRANSACTION_TYPES, verbose_name='Type')
     isvalidated = models.BooleanField(default=False, verbose_name='A été validée?')
-    expectedvalidationdate = models.DateField(verbose_name='Date de validation attendue')
+    expectedvalidationdate = models.DateTimeField(verbose_name='Date de validation attendue')
     validationdate = models.DateTimeField(verbose_name='Date effective de validation')
-    beneficiarynumber = models.IntegerField(db_column='beneficiaryid', verbose_name='Bénéficiaire')
-    customernumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='customernumber', verbose_name='Client')
+    beneficiarynumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='beneficiarynumber', verbose_name='Bénéficiaire')
+    customernumber = models.CharField(db_column='customernumber', verbose_name='Client', null=True, max_length=9)
     merchantpoint = models.ForeignKey(MerchantPoint, models.DO_NOTHING, db_column='merchantpointid', verbose_name='Point marchand')
+    amount = models.DecimalField(max_digits=19, decimal_places=5, null=False, verbose_name='Montant')
     otp = models.ForeignKey(Otp, models.DO_NOTHING, db_column='otpcode')
 
     class Meta:
@@ -194,9 +192,4 @@ class WaitingLine(models.Model):
         verbose_name = 'File d\'attente'
         verbose_name_plural = 'Files d\'attente'
 
-
-# class CustomerForm(ModelForm):
-#     class Meta:
-#         model = Customer
-#         fields = ['firstname', 'lastname']
 
