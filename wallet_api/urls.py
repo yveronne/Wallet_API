@@ -15,6 +15,7 @@ urlpatterns = [
     url(r'^merchant/logout$', views.LogoutUserAPIView.as_view(), name='auth_user_logout'),
     path('customers', views.CustomerCreation.as_view()),
     path('waitinglines/<int:pk>', views.WaitingLineServe.as_view()),
-    path('transactions', views.TransactionInitiation.as_view())
+    path('transactions', views.TransactionInitiation.as_view()),
+    path('transactions/confirm', views.validateTransaction)
 ]
 

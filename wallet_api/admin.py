@@ -20,12 +20,23 @@ admin.site.register(Comment, CommentAdmin)
 class CommentInLine(admin.TabularInline):
     model = Comment
 
+
+class TransactionAdmin(admin.ModelAdmin):
+    search_fields = ['type']
+    list_select_related = ('merchantpoint', )
+    list_display = ['type', 'amount', 'expectedvalidationdate', 'beneficiarynumber', 'merchantpoint']
+admin.site.register(Transaction, TransactionAdmin)
+
+
+class TransactionInLine(admin.TabularInline):
+    model = Transaction
+
 @admin.register(MerchantPoint)
 class MerchantPointAdmin(OSMGeoAdmin):
     list_display = ('name', 'area', 'position', 'district')
     list_select_related = ('district', )
     inlines = [
-        CommentInLine,
+        TransactionInLine, CommentInLine,
     ]
 
 class MerchantPointInline(admin.TabularInline):
