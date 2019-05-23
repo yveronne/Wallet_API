@@ -11,7 +11,7 @@ urlpatterns = [
     re_path('merchantpoints/([\d]+)/waitingline', views.WaitingLineView.as_view()),
     re_path('merchantpoints/([\d]+)/pendingtransactions', views.TransactionView.as_view()),
     path('comments', views.CommentCreation.as_view()),
-    url(r'^merchant/login$', obtain_auth_token, name='auth_user_login'),
+    url(r'^merchant/login$', views.LoginUserAPIView.as_view(), name='auth_user_login'),
     url(r'^merchant/logout$', views.LogoutUserAPIView.as_view(), name='auth_user_logout'),
     path('customers', views.CustomerCreation.as_view()),
     path('waitinglines/<int:pk>', views.WaitingLineServe.as_view()),

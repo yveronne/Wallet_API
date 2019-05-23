@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .permissions import IsMerchantOrReadOnly
 from rest_framework.decorators import api_view
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
 
 from datetime import datetime, timedelta
 
@@ -51,13 +53,11 @@ class CommentCreation(generics.CreateAPIView):
         try:
             customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
         except Customer.DoesNotExist:
-            content = "Ce numéro de téléphone n'existe pas"
-            return Response(content, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
         try:
             merchant_point = MerchantPoint.objects.get(id=self.request.data.get('merchantpointid'))
         except MerchantPoint.DoesNotExist:
-            content = "Ce point marchand n'existe pas"
-            return Response(content, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = CommentSerializer(data=request.data)
         if serializer.is_valid():
@@ -84,14 +84,12 @@ class WaitingLineView(generics.ListCreateAPIView):
         try:
             customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
         except Customer.DoesNotExist:
-            content = "Ce numéro de téléphone n'existe pas"
-            return Response(content, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             merchant_point = MerchantPoint.objects.get(id=self.args[0])
         except MerchantPoint.DoesNotExist:
-            content = "Ce point marchand n'existe pas"
-            return Response(content, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = WaitingLineSerializer(data=request.data)
         if serializer.is_valid():
@@ -99,15 +97,14 @@ class WaitingLineView(generics.ListCreateAPIView):
                 serializer.save(customernumber=customer, merchantpoint=merchant_point, wasserved=False)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             else:
-                content = "Le mot de passe entré est erroné"
-                return Response(content, status=status.HTTP_404_NOT_FOUND)
+                return Response({"message" : "Le mot de passe entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class WaitingLineServe(generics.UpdateAPIView):
 
-    serializer_class = WaitingLineSerializer
+    serializer_class = WaitingLineUpdateSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -122,6 +119,25 @@ class TransactionView(generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = Transaction.objects.filter(merchantpoint=self.args[0], isvalidated=False)
         return queryset
+
+
+class LoginUserAPIView(ObtainAuthToken):
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data,
+                                           context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, created = Token.objects.get_or_create(user=user)
+        try:
+            merchant = Merchant.objects.get(user=user)
+        except Merchant.DoesNotExist:
+            return Response({"error" : "Ce compte n'est pas celui d'un marchand"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            merchantPoint = MerchantPoint.objects.get(merchant=merchant)
+        except MerchantPoint.DoesNotExist:
+            return  Response({"error" : "Ce compte n'est associé à aucun point marchant"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"token": token.key, "merchantPointID" : merchantPoint.id})
 
 
 class LogoutUserAPIView(APIView):
@@ -171,16 +187,14 @@ class TransactionInitiation(generics.CreateAPIView):
         try:
             merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
         except MerchantPoint.DoesNotExist:
-            content = "Ce point marchand n'existe pas"
-            return Response(content, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         if transaction_type == 'Depot':
             beneficiaryNumber = self.request.data.get('beneficiaryNumber').replace(" ","")
             try:
                 beneficiary = Customer.objects.get(phonenumber=beneficiaryNumber)
             except Customer.DoesNotExist:
-                content = "Le numéro du bénéficiaire entré est introuvable"
-                return Response(content, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error" : "Le numéro du bénéficiaire entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
 
             serializer = TransactionSerializer(data=request.data)
             if serializer.is_valid():
@@ -206,12 +220,12 @@ class TransactionInitiation(generics.CreateAPIView):
                 message = sendOtp(otpie.code, number, expirie.strftime("%d-%b-%Y %H:%M:%S"))
                 if message != "queued":
                     otpie.delete()
-                    return Response("Une erreur est survenue. Veuillez réessayer", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    return Response({"error" : "Une erreur est survenue. Veuillez réessayer"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 else:
                     #Saving transaction
                     serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
                                     expectedvalidationdate=expectedDate, otp=otpie)
-                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                    return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -221,8 +235,7 @@ class TransactionInitiation(generics.CreateAPIView):
             try:
                 customer = Customer.objects.get(phonenumber=number)
             except Customer.DoesNotExist:
-                content = "Le numéro de client entré est introuvable"
-                return Response(content, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
 
             serializer = TransactionSerializer(data=request.data)
             if(serializer.is_valid()):
@@ -251,7 +264,7 @@ class TransactionInitiation(generics.CreateAPIView):
                         message = sendOtp(otpie.code, number, expirie.strftime("%d-%b-%Y %H:%M:%S"))
                         if message != "queued":
                             otpie.delete()
-                            return Response("Une erreur est survenue. Veuillez réessayer",
+                            return Response({ "error" : "Une erreur est survenue. Veuillez réessayer"},
                                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                         else:
                             # Saving transaction
@@ -259,12 +272,11 @@ class TransactionInitiation(generics.CreateAPIView):
                                             amount=amount, customernumber=customer.phonenumber,
                                             expectedvalidationdate=expectedDate, otp=otpie)
 
-                            return Response(serializer.data, status=status.HTTP_201_CREATED)
+                            return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
                     else:
-                        return Response({"message": "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+                        return Response({"error": "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
                 else:
-                    content = "Le code secret entré est erroné"
-                    return Response(content, status=status.HTTP_404_NOT_FOUND)
+                    return Response({"error" : "Le code secret entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -276,8 +288,7 @@ class TransactionInitiation(generics.CreateAPIView):
             try:
                 customer = Customer.objects.get(phonenumber=number)
             except Customer.DoesNotExist:
-                content = "Le numéro de client entré est introuvable"
-                return Response(content, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
 
             serializer = TransactionSerializer(data=request.data)
             if (serializer.is_valid()):
@@ -306,34 +317,33 @@ class TransactionInitiation(generics.CreateAPIView):
                         message = sendOtp(otpie.code, number, expirie.strftime("%d-%b-%Y %H:%M:%S"))
                         if message != "queued":
                             otpie.delete()
-                            return Response("Une erreur est survenue. Veuillez réessayer",
+                            return Response({"error" : "Une erreur est survenue. Veuillez réessayer"},
                                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                         else:
                             # Saving transaction
                             serializer.save(type='Paiement', merchantpoint=merchantPoint,
                                             amount=amount, customernumber=customer.phonenumber,
                                             expectedvalidationdate=expectedDate, otp=otpie)
-                            return Response(serializer.data, status=status.HTTP_201_CREATED)
+                            return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
                     else:
-                        return Response({"message" : "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+                        return Response({"error" : "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
                 else:
-                    content = "Le code secret entré est erroné"
-                    return Response(content, status=status.HTTP_404_NOT_FOUND)
+                    return Response({"error": "Le code secret entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 def validateTransaction(request):
-    codie = request.POST.get('code', 'Rien')
+    codie = request.data.get('code')
     try:
         otpie = Otp.objects.get(code=codie)
         if otpie.wasverified == True:
             return Response({"message" : "Ce code a déjà été vérifié"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
         elif  otpie.expirationdate < datetime.now():
-            return Response({"message": "Ce code a expiré"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+            return Response({"error": "Ce code a expiré"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
         else:
             try:
@@ -363,7 +373,7 @@ def validateTransaction(request):
                         return Response({"message" : "La transaction a bien été validée."}, status=status.HTTP_200_OK)
 
                     except Customer.DoesNotExist:
-                        return Response({"message": "Le bénéficiaire n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                        return Response({"error": "Le bénéficiaire n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
                 elif transaction.type == "Retrait":
@@ -378,7 +388,7 @@ def validateTransaction(request):
                             oldCustomerBalance = customer.balance
 
                             if oldCustomerBalance < amount:
-                                return Response({"message": "Transaction échouée. Solde insuffisant"},
+                                return Response({"error": "Transaction échouée. Solde insuffisant"},
                                                 status=status.HTTP_406_NOT_ACCEPTABLE)
                             else:
                                 customer.balance = oldCustomerBalance - amount
@@ -402,11 +412,11 @@ def validateTransaction(request):
                                 return Response({"message" : "La transaction a bien été validée."}, status=status.HTTP_200_OK)
 
                         except Customer.DoesNotExist:
-                            return Response({"message": "Le client n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                            return Response({"error": "Le client n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
                     except MerchantPoint.DoesNotExist:
-                        return Response({"message": "Le point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                        return Response({"error": "Le point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
                 elif transaction.type == "Paiement":
@@ -421,7 +431,7 @@ def validateTransaction(request):
                             oldCustomerBalance = customer.balance
 
                             if oldCustomerBalance < amount:
-                                return Response({"message":"Transaction échouée. Solde insuffisant"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+                                return Response({"error":"Transaction échouée. Solde insuffisant"}, status=status.HTTP_406_NOT_ACCEPTABLE)
                             else :
                                 customer.balance = oldCustomerBalance - amount
                                 merchantpoint.balance = oldStoreBalance + amount
@@ -444,17 +454,18 @@ def validateTransaction(request):
                                 return Response({"message" : "La transaction a bien été validée"}, status=status.HTTP_200_OK)
 
                         except Customer.DoesNotExist:
-                            content = "Le numéro de client entré est introuvable"
-                            return Response(content, status=status.HTTP_404_NOT_FOUND)
+                            return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
 
                     except MerchantPoint.DoesNotExist:
-                        return Response({"message": "Le point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                        return Response({"error": "Le point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
                 return Response({"message": "La transaction a bien été validée"}, status=status.HTTP_200_OK)
 
             except Transaction.DoesNotExist:
-                return Response({"message": "La transaction sollicitée n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error": "La transaction sollicitée n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
     except Otp.DoesNotExist:
-        return Response({"message" : "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error" : "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+
+

@@ -21,6 +21,11 @@ class WaitingLineSerializer(serializers.ModelSerializer):
         model = WaitingLine
         fields = ('id', 'date', 'customernumber')
 
+class WaitingLineUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WaitingLine
+        fields = ('wasserved','servicedate')
+
 
 
 class MerchantPointSerializer(serializers.ModelSerializer):
