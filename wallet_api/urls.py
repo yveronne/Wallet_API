@@ -9,7 +9,7 @@ urlpatterns = [
     re_path('towns/([\w]+)/merchantpoints', views.MerchantPointsList.as_view()),    #Liste des points marchands ouverts de la ville
     path('merchantpoints/<int:pk>', views.OpenOrCloseMerchantPoint.as_view()),      #Ouvrir ou fermer un point marchand
     re_path('merchantpoints/([\d]+)/waitingline', views.WaitingLineView.as_view()),
-    re_path('merchantpoints/([\d]+)/pendingtransactions', views.TransactionView.as_view()),
+    re_path('merchantpoints/([\d]+)/transactions', views.TransactionView.as_view()),
     path('comments', views.CommentCreation.as_view()),
     url(r'^merchant/login$', views.LoginUserAPIView.as_view(), name='auth_user_login'),
     url(r'^merchant/logout$', views.LogoutUserAPIView.as_view(), name='auth_user_logout'),

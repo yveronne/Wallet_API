@@ -53,16 +53,18 @@ class CommentCreation(generics.CreateAPIView):
         try:
             customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
         except Customer.DoesNotExist:
-            return Response({"message" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
         try:
             merchant_point = MerchantPoint.objects.get(id=self.request.data.get('merchantpointid'))
         except MerchantPoint.DoesNotExist:
-            return Response({"message" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = CommentSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(customernumber=customer, merchantpoint=merchant_point)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            content = serializer.data
+            content["message"] = "Votre commentaire a bien été envoyé. Merci."
+            return Response(content, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -84,20 +86,22 @@ class WaitingLineView(generics.ListCreateAPIView):
         try:
             customer = Customer.objects.get(phonenumber=self.request.data.get('customernumber'))
         except Customer.DoesNotExist:
-            return Response({"message" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error" : "Ce numéro de téléphone n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
             merchant_point = MerchantPoint.objects.get(id=self.args[0])
         except MerchantPoint.DoesNotExist:
-            return Response({"message" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = WaitingLineSerializer(data=request.data)
         if serializer.is_valid():
             if check_password(self.request.data.get('secret').replace(" ",""), customer.secret):
                 serializer.save(customernumber=customer, merchantpoint=merchant_point, wasserved=False)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+                content = serializer.data
+                content["message"] = "Vous avez bien été inséré(e) dans la file d'attente."
+                return Response(content, status=status.HTTP_201_CREATED)
             else:
-                return Response({"message" : "Le mot de passe entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error" : "Le mot de passe entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -115,9 +119,10 @@ class WaitingLineServe(generics.UpdateAPIView):
 
 class TransactionView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = TransactionListSerializer
 
     def get_queryset(self):
-        queryset = Transaction.objects.filter(merchantpoint=self.args[0], isvalidated=False)
+        queryset = Transaction.objects.filter(merchantpoint=self.args[0], isvalidated=False).order_by('expectedvalidationdate').reverse()
         return queryset
 
 
@@ -224,7 +229,7 @@ class TransactionInitiation(generics.CreateAPIView):
                 else:
                     #Saving transaction
                     serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
-                                    expectedvalidationdate=expectedDate, otp=otpie)
+                                    expectedvalidationdate=expectedDate, otp=otpie, customernumber=number)
                     return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -324,7 +329,8 @@ class TransactionInitiation(generics.CreateAPIView):
                             serializer.save(type='Paiement', merchantpoint=merchantPoint,
                                             amount=amount, customernumber=customer.phonenumber,
                                             expectedvalidationdate=expectedDate, otp=otpie)
-                            return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
+                            return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number,
+                                              "montant" : amount, "code" : otpie.code}, status=status.HTTP_201_CREATED)
                     else:
                         return Response({"error" : "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
