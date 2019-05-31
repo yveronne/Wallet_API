@@ -64,4 +64,4 @@ class TransactionSerializer(serializers.ModelSerializer):
 class TransactionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ('id', 'expectedvalidationdate', 'type', 'amount', 'customernumber', 'beneficiarynumber')
+        fields = ('id', 'date', 'expectedvalidationdate', 'type', 'amount', 'customernumber', 'beneficiarynumber')
