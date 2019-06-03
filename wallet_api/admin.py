@@ -4,7 +4,7 @@ from .models import *
 
 admin.site.site_header = "Administration de Wallet"
 admin.site.site_title = "Administration de Wallet"
-admin.site.index_title = "Administration"
+admin.site.index_title = ""
 
 
 admin.site.register(Town)
@@ -14,6 +14,7 @@ class CustomerAdmin(admin.ModelAdmin):
     exclude = ('secret', )
     search_fields = ('lastname', 'phonenumber')
     list_display = ('phonenumber', 'full_name', 'gender', 'cninumber')
+    list_per_page = 50
 admin.site.register(Customer, CustomerAdmin)
 
 
@@ -22,6 +23,7 @@ class CommentAdmin(admin.ModelAdmin):
     list_select_related = ('merchantpoint', )
     list_display = ('date', 'title', 'content', 'merchantpoint')
     list_filter = ('merchantpoint__district__townname', )
+    list_per_page = 50
 admin.site.register(Comment, CommentAdmin)
 
 
@@ -37,6 +39,7 @@ class TransactionAdmin(admin.ModelAdmin):
     list_filter = ('type', 'isvalidated',
                    ('expectedvalidationdate', admin.DateFieldListFilter),
                     'merchantpoint__district__townname')
+    list_per_page = 50
 admin.site.register(Transaction, TransactionAdmin)
 
 
@@ -44,6 +47,7 @@ admin.site.register(Transaction, TransactionAdmin)
 class TransactionInLine(admin.TabularInline):
     model = Transaction
     fields = ('type', 'amount', 'isvalidated', 'expectedvalidationdate', 'validationdate')
+    ordering = ('-expectedvalidationdate',)
 
 
 
@@ -51,9 +55,11 @@ class TransactionInLine(admin.TabularInline):
 class MerchantPointAdmin(OSMGeoAdmin):
     list_display = ('name', 'area', 'position', 'district')
     list_select_related = ('district', )
+    list_filter = ('district__townname',)
     inlines = [
         TransactionInLine, CommentInLine,
     ]
+    list_per_page = 50
 
 
 
@@ -66,9 +72,11 @@ class DistrictAdmin(admin.ModelAdmin):
     search_fields = ('name', 'townname')
     list_select_related = ('townname', )
     list_display = ('name', 'townname')
+    list_filter = ('townname',)
     inlines = [
         MerchantPointInline,
     ]
+    list_per_page = 50
 admin.site.register(District, DistrictAdmin)
 
 

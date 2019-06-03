@@ -17,7 +17,7 @@ body {
 
 a:link, a:visited {
     /*color: red;*/
-    color: red;
+    color: #000000;
     text-decoration: none;
 }
 
@@ -61,9 +61,9 @@ h1,h2,h3,h4,h5 {
 
 h1 {
     margin: 0 0 20px;
-    font-weight: 300;
+    font-weight: bold;
     font-size: 20px;
-    color: #666;
+    color: red;
 }
 
 h2 {
@@ -453,6 +453,7 @@ select[multiple] {
 /* FORM BUTTONS */
 
 .button, input[type=submit], input[type=button], .submit-row input, a.button {
+    /*background: red;*/
     background: red;
     padding: 10px 15px;
     border: none;
@@ -479,13 +480,13 @@ a.button {
     float: right;
     border: none;
     font-weight: 400;
-    background: #417690;
+    background: #8b8b8b;
 }
 
 .button.default:active, input[type=submit].default:active,
 .button.default:focus, input[type=submit].default:focus,
 .button.default:hover, input[type=submit].default:hover {
-    background: #205067;
+    background: #c5c5c5;
 }
 
 .button[disabled].default,
@@ -526,7 +527,7 @@ input[type=button][disabled].default {
     font-weight: 400;
     font-size: 13px;
     text-align: left;
-    background: #79aec8;
+    background: #Fe2e2e;
     color: #fff;
 }
 
