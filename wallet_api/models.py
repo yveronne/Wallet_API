@@ -89,7 +89,7 @@ class MerchantPoint(models.Model):
         verbose_name_plural = 'Points marchands'
 
     def __str__(self):
-        return "%s - %s" % (self.name, self.area)
+        return "%s - %s, %s" % (self.name, self.area, self.district)
 
 
 

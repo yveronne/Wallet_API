@@ -140,6 +140,8 @@ class LoginUserAPIView(ObtainAuthToken):
             return Response({"error" : "Ce compte n'est pas celui d'un marchand"}, status=status.HTTP_404_NOT_FOUND)
         try:
             merchantPoint = MerchantPoint.objects.get(merchant=merchant)
+            merchantPoint.isopen = True
+            merchantPoint.save()
         except MerchantPoint.DoesNotExist:
             return  Response({"error" : "Ce compte n'est associé à aucun point marchant"}, status=status.HTTP_404_NOT_FOUND)
         return Response({"token": token.key, "merchantPointID" : merchantPoint.id})
@@ -150,6 +152,16 @@ class LogoutUserAPIView(APIView):
 
     def get(self, request, format=None):
         request.user.auth_token.delete()
+        try:
+            merchant = Merchant.objects.get(user=request.user)
+        except Merchant.DoesNotExist:
+            return Response({"error" : "Ce compte n'est pas celui d'un marchand"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            merchantPoint = MerchantPoint.objects.get(merchant=merchant)
+            merchantPoint.isopen = False
+            merchantPoint.save()
+        except MerchantPoint.DoesNotExist:
+            return Response({"error": "Ce compte n'est associé à aucun point marchant"}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_200_OK)
 
 
