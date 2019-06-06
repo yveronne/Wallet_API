@@ -16,6 +16,7 @@ urlpatterns = [
     path('customers', views.CustomerCreation.as_view()),
     path('waitinglines/<int:pk>', views.WaitingLineServe.as_view()),
     path('transactions', views.TransactionInitiation.as_view()),
-    path('transactions/confirm', views.validateTransaction)
+    path('otp/confirmwithdrawal', views.customerValidation),
+    path('transactions/confirm', views.validateTransaction),
 ]
 

@@ -36,7 +36,7 @@ class TransactionAdmin(admin.ModelAdmin):
     list_select_related = ('merchantpoint', )
     list_display = ('type', 'amount', 'expectedvalidationdate', 'beneficiarynumber', 'merchantpoint')
     exclude = ('otp', )
-    list_filter = ('type', 'isvalidated',
+    list_filter = ('type', 'wasvalidatedbymerchant',
                    ('expectedvalidationdate', admin.DateFieldListFilter),
                     'merchantpoint__district__townname')
     list_per_page = 50
@@ -46,7 +46,7 @@ admin.site.register(Transaction, TransactionAdmin)
 
 class TransactionInLine(admin.TabularInline):
     model = Transaction
-    fields = ('type', 'amount', 'isvalidated', 'expectedvalidationdate', 'validationdate')
+    fields = ('type', 'amount', 'wasvalidatedbymerchant', 'expectedvalidationdate', 'validationdate')
     ordering = ('-expectedvalidationdate',)
 
 

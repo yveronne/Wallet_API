@@ -6,14 +6,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .permissions import IsMerchantOrReadOnly
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 
 from datetime import datetime, timedelta
 
 from .serializers import *
-from .messages import sendOtp, sendTransactionSMS
+from .messages import sendOtp, sendTransactionSMS, sendTransactionConfirmationSMS
 
 class TownsList(generics.ListAPIView):
     queryset = Town.objects.order_by('name')
@@ -122,7 +122,7 @@ class TransactionView(generics.ListCreateAPIView):
     serializer_class = TransactionListSerializer
 
     def get_queryset(self):
-        queryset = Transaction.objects.filter(merchantpoint=self.args[0], isvalidated=False).order_by('expectedvalidationdate').reverse()
+        queryset = Transaction.objects.filter(merchantpoint=self.args[0], wasvalidatedbymerchant=False).order_by('expectedvalidationdate').reverse()
         return queryset
 
 
@@ -196,10 +196,7 @@ class TransactionInitiation(generics.CreateAPIView):
         merchantPoint = self.request.data.get('merchantPointID')
         expectedDate = self.request.data.get('expectedvalidationdate')
         number = self.request.data.get('customerNumber').replace(" ", "")
-
-        #Calculating expiration date of the otp (expected validation date + 1 hour)
         expectie = datetime.strptime(expectedDate, "%Y-%m-%d %H:%M:%S")
-        expirie = expectie + timedelta(hours=1)
 
         try:
             merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
@@ -207,6 +204,8 @@ class TransactionInitiation(generics.CreateAPIView):
             return Response({"error" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         if transaction_type == 'Depot':
+            # Calculating expiration date of the otp (expected validation date + 1 hour)
+            expirie = expectie + timedelta(hours=1)
             beneficiaryNumber = self.request.data.get('beneficiaryNumber').replace(" ","")
             try:
                 beneficiary = Customer.objects.get(phonenumber=beneficiaryNumber)
@@ -241,12 +240,14 @@ class TransactionInitiation(generics.CreateAPIView):
                 else:
                     #Saving transaction
                     serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
-                                    expectedvalidationdate=expectedDate, otp=otpie, customernumber=number)
+                                    expectedvalidationdate=expectedDate, otp=otpie, customernumber=number, wasvalidatedbycustomer=True)
                     return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         elif (transaction_type == 'Retrait'):
+            # Calculating expiration date of the otp (expected validation date + 1 hour)
+            expirie = expectie + timedelta(hours=1)
             secret = self.request.data.get('secret').replace(" ", "")
 
             try:
@@ -300,6 +301,7 @@ class TransactionInitiation(generics.CreateAPIView):
 
 
         elif (transaction_type == 'Paiement'):
+            expirie = expectie + timedelta(minutes=2)
             secret = self.request.data.get('secret').replace(" ", "")
 
             try:
@@ -308,6 +310,7 @@ class TransactionInitiation(generics.CreateAPIView):
                 return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
 
             serializer = TransactionSerializer(data=request.data)
+            print(request.data)
             if (serializer.is_valid()):
                 if check_password(secret, customer.secret):
 
@@ -340,7 +343,7 @@ class TransactionInitiation(generics.CreateAPIView):
                             # Saving transaction
                             serializer.save(type='Paiement', merchantpoint=merchantPoint,
                                             amount=amount, customernumber=customer.phonenumber,
-                                            expectedvalidationdate=expectedDate, otp=otpie)
+                                            expectedvalidationdate=expirie, otp=otpie, wasvalidatedbycustomer=True)
                             return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number,
                                               "montant" : amount, "code" : otpie.code}, status=status.HTTP_201_CREATED)
                     else:
@@ -365,7 +368,7 @@ def validateTransaction(request):
 
         else:
             try:
-                transaction = Transaction.objects.get(otp=otpie, isvalidated=False)
+                transaction = Transaction.objects.get(otp=otpie, wasvalidatedbymerchant=False)
 
                 if transaction.type == "Depot":
 
@@ -375,7 +378,7 @@ def validateTransaction(request):
                         beneficiary.balance = oldBalance + transaction.amount
                         beneficiary.save()
 
-                        transaction.isvalidated = True
+                        transaction.wasvalidatedbymerchant = True
                         transaction.validationdate = datetime.now()
                         transaction.save()
 
@@ -406,28 +409,19 @@ def validateTransaction(request):
                             oldCustomerBalance = customer.balance
 
                             if oldCustomerBalance < amount:
-                                return Response({"error": "Transaction échouée. Solde insuffisant"},
+                                return Response({"error": "Solde du client insuffisant"},
+                                                status=status.HTTP_406_NOT_ACCEPTABLE)
+                            elif oldStoreBalance < amount:
+                                return Response({"error": "Solde du point marchand insuffisant"},
                                                 status=status.HTTP_406_NOT_ACCEPTABLE)
                             else:
-                                customer.balance = oldCustomerBalance - amount
-                                merchantpoint.balance = oldStoreBalance + amount
-                                customer.save()
-                                merchantpoint.save()
 
-                                transaction.isvalidated = True
-                                transaction.validationdate = datetime.now()
+                                transaction.wasvalidatedbymerchant = True
                                 transaction.save()
 
-                                otpie.wasverified = True
-                                otpie.save()
+                                sendTransactionConfirmationSMS(customer.phonenumber, str(transaction.amount))
 
-                                sendTransactionSMS(customer.phonenumber, "retrait",
-                                                   transaction.date.strftime("%d-%b-%Y %H:%M:%S"),
-                                                   transaction.expectedvalidationdate.strftime("%d-%b-%Y %H:%M:%S"),
-                                                   transaction.validationdate.strftime("%d-%b-%Y %H:%M:%S"),
-                                                   str(customer.balance))
-
-                                return Response({"message" : "La transaction a bien été validée."}, status=status.HTTP_200_OK)
+                                return Response({"message" : "Message de confirmation envoyé au client. Il doit confirmer la transaction."}, status=status.HTTP_200_OK)
 
                         except Customer.DoesNotExist:
                             return Response({"error": "Le client n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
@@ -456,7 +450,7 @@ def validateTransaction(request):
                                 customer.save()
                                 merchantpoint.save()
 
-                                transaction.isvalidated = True
+                                transaction.wasvalidatedbymerchant = True
                                 transaction.validationdate = datetime.now()
                                 transaction.save()
 
@@ -485,5 +479,71 @@ def validateTransaction(request):
 
     except Otp.DoesNotExist:
         return Response({"error" : "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+@api_view(['POST'])
+@permission_classes((AllowAny, ))
+def customerValidation(request):
+    codie = request.data.get('code')
+    secret = request.data.get('secret').replace(" ","")
+
+    try:
+        otpie = Otp.objects.get(code=codie)
+        if otpie.wasverified == True:
+            return Response({"message": "Ce code a déjà été vérifié"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+        elif otpie.expirationdate < datetime.now():
+            return Response({"error": "Ce code a expiré"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+        else:
+            try:
+                transaction = Transaction.objects.get(otp=otpie, wasvalidatedbycustomer=False, type="Retrait")
+                try:
+                    customer = Customer.objects.get(phonenumber=transaction.customernumber)
+                    if check_password(secret, customer.secret):
+                        try:
+                            merchantpoint = MerchantPoint.objects.get(id=transaction.merchantpoint_id)
+                            amount = transaction.amount
+                            oldStoreBalance = merchantpoint.balance
+                            oldCustomerBalance = customer.balance
+
+                            if oldCustomerBalance < amount:
+                                return Response({"error": "Transaction échouée. Solde du client insuffisant"},
+                                                status=status.HTTP_406_NOT_ACCEPTABLE)
+                            elif oldStoreBalance < amount:
+                                return Response({"error": "Transaction échouée. Solde du point marchand insuffisant"},
+                                                status=status.HTTP_406_NOT_ACCEPTABLE)
+                            else:
+                                customer.balance = oldCustomerBalance - amount
+                                merchantpoint.balance = oldStoreBalance - amount
+                                customer.save()
+                                merchantpoint.save()
+
+                                transaction.wasvalidatedbycustomer = True
+                                transaction.validationdate = datetime.now()
+                                transaction.save()
+
+                                otpie.wasverified = True
+                                otpie.save()
+
+                                sendTransactionSMS(customer.phonenumber, "retrait",
+                                                   transaction.date.strftime("%d-%b-%Y %H:%M:%S"),
+                                                   transaction.expectedvalidationdate.strftime("%d-%b-%Y %H:%M:%S"),
+                                                   transaction.validationdate.strftime("%d-%b-%Y %H:%M:%S"),
+                                                   str(customer.balance))
+
+                                return Response({"message": "La transaction a bien été validée."},
+                                                status=status.HTTP_200_OK)
+
+                        except MerchantPoint.DoesNotExist:
+                            return Response({"error": "Le point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+                    else:
+                        return Response({"error": "Le code secret est incorrect"}, status=status.HTTP_404_NOT_FOUND)
+                except Customer.DoesNotExist :
+                    return Response({"error": "Ce client n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+            except Transaction.DoesNotExist:
+                return Response({"error": "Cette transaction n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+    except Otp.DoesNotExist:
+        return Response({"error": "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+
 
 

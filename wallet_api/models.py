@@ -159,7 +159,8 @@ class Otp(models.Model):
 class Transaction(models.Model):
     date = models.DateTimeField(auto_now_add=True, verbose_name='Date')
     type = models.TextField(choices=TRANSACTION_TYPES, verbose_name='Type')
-    isvalidated = models.BooleanField(default=False, verbose_name='A été validée?')
+    wasvalidatedbycustomer = models.BooleanField(default=False, verbose_name='A été validée par le client?')
+    wasvalidatedbymerchant = models.BooleanField(default=False, verbose_name='A été validée par le marchand?')
     expectedvalidationdate = models.DateTimeField(verbose_name='Date de validation attendue')
     validationdate = models.DateTimeField(verbose_name='Date effective de validation')
     beneficiarynumber = models.ForeignKey(Customer, models.DO_NOTHING, db_column='beneficiarynumber', verbose_name='Bénéficiaire')
