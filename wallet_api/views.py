@@ -9,6 +9,7 @@ from .permissions import IsMerchantOrReadOnly
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
+from django.utils import timezone
 
 from datetime import datetime, timedelta
 
@@ -197,6 +198,7 @@ class TransactionInitiation(generics.CreateAPIView):
         expectedDate = self.request.data.get('expectedvalidationdate')
         number = self.request.data.get('customerNumber').replace(" ", "")
         expectie = datetime.strptime(expectedDate, "%Y-%m-%d %H:%M:%S")
+        print(expectie)
 
         try:
             merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
@@ -228,7 +230,8 @@ class TransactionInitiation(generics.CreateAPIView):
                         elif otpie.wasverified == False and otpie.expirationdate >= datetime.now():
                             continue
                     except Otp.DoesNotExist:
-                        otpie = Otp(code=code, expirationdate=expirie)
+                        otpie = Otp(code=code, expirationdate=expirie.strftime("%Y-%m-%d %H:%M:%S"))
+                        print(otpie.expirationdate)
                         otpie.save()
                         break
 
@@ -240,7 +243,7 @@ class TransactionInitiation(generics.CreateAPIView):
                 else:
                     #Saving transaction
                     serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
-                                    expectedvalidationdate=expectedDate, otp=otpie, customernumber=number, wasvalidatedbycustomer=True)
+                                    expectedvalidationdate=expectie.strftime("%Y-%m-%d %H:%M:%S"), otp=otpie, customernumber=number, wasvalidatedbycustomer=True)
                     return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -301,7 +304,8 @@ class TransactionInitiation(generics.CreateAPIView):
 
 
         elif (transaction_type == 'Paiement'):
-            expirie = expectie + timedelta(minutes=2)
+            expectie = datetime.now()
+            expirie = expectie + timedelta(minutes=3)
             secret = self.request.data.get('secret').replace(" ", "")
 
             try:
@@ -358,17 +362,21 @@ class TransactionInitiation(generics.CreateAPIView):
 @api_view(['POST'])
 def validateTransaction(request):
     codie = request.data.get('code')
+    amount = request.data.get('amount')
     try:
         otpie = Otp.objects.get(code=codie)
         if otpie.wasverified == True:
-            return Response({"message" : "Ce code a déjà été vérifié"}, status=status.HTTP_406_NOT_ACCEPTABLE)
+            return Response({"error" : "Ce code a déjà été vérifié"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
-        elif  otpie.expirationdate < datetime.now():
+        elif  otpie.expirationdate < timezone.now():
             return Response({"error": "Ce code a expiré"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
         else:
             try:
                 transaction = Transaction.objects.get(otp=otpie, wasvalidatedbymerchant=False)
+
+                if transaction.amount != float(amount):
+                    return Response({"error" : "Le montant fourni par le code QR est incorrect"}, status=status.HTTP_406_NOT_ACCEPTABLE)
 
                 if transaction.type == "Depot":
 
@@ -481,7 +489,6 @@ def validateTransaction(request):
         return Response({"error" : "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
-
 @api_view(['POST'])
 @permission_classes((AllowAny, ))
 def customerValidation(request):
@@ -546,4 +553,7 @@ def customerValidation(request):
         return Response({"error": "Le code fourni n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
 
-
+class TransactionDetail(generics.RetrieveAPIView):
+    serializer_class = TransactionListSerializer
+    permission_classes = [IsMerchantOrReadOnly]
+    queryset = Transaction.objects.all()

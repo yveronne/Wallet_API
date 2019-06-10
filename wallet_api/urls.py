@@ -18,5 +18,6 @@ urlpatterns = [
     path('transactions', views.TransactionInitiation.as_view()),
     path('otp/confirmwithdrawal', views.customerValidation),
     path('transactions/confirm', views.validateTransaction),
+    path('transactions/<int:pk>', views.TransactionDetail.as_view())
 ]
 
