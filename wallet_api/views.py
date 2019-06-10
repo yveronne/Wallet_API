@@ -70,7 +70,6 @@ class CommentCreation(generics.CreateAPIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class WaitingLineView(generics.ListCreateAPIView):
     serializer_class = WaitingLineSerializer
     permission_classes = [AllowAny]
@@ -115,7 +114,6 @@ class WaitingLineServe(generics.UpdateAPIView):
     def get_queryset(self):
         queryset = WaitingLine.objects.all()
         return queryset
-
 
 
 class TransactionView(generics.ListCreateAPIView):
@@ -179,7 +177,7 @@ class CustomerCreation(generics.CreateAPIView):
 class TransactionInitiation(generics.CreateAPIView):
     queryset = Transaction.objects.all()
     permission_classes = [AllowAny]
-    serializer_class = TransactionSerializer
+    serializer_class = PaymentSerializer
 
     def generateOtp(self):
         from random import randint
@@ -193,73 +191,93 @@ class TransactionInitiation(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         transaction_type = self.request.data.get('type')
-        amount = self.request.data.get('amount')
-        merchantPoint = self.request.data.get('merchantPointID')
-        expectedDate = self.request.data.get('expectedvalidationdate')
-        number = self.request.data.get('customerNumber').replace(" ", "")
-        expectie = datetime.strptime(expectedDate, "%Y-%m-%d %H:%M:%S")
-        print(expectie)
-
-        try:
-            merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
-        except MerchantPoint.DoesNotExist:
-            return Response({"error" : "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
         if transaction_type == 'Depot':
-            # Calculating expiration date of the otp (expected validation date + 1 hour)
-            expirie = expectie + timedelta(hours=1)
-            beneficiaryNumber = self.request.data.get('beneficiaryNumber').replace(" ","")
-            try:
-                beneficiary = Customer.objects.get(phonenumber=beneficiaryNumber)
-            except Customer.DoesNotExist:
-                return Response({"error" : "Le numéro du bénéficiaire entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
+            serializer = DepositSerializer(data=request.data)
 
-            serializer = TransactionSerializer(data=request.data)
             if serializer.is_valid():
-                #Saving OTP
+                amount = self.request.data.get('amount')
+                merchantPoint = self.request.data.get('merchantpoint')
+                number = self.request.data.get('customernumber').replace(" ", "")
+                expectie = datetime.strptime(self.request.data.get('expectedvalidationdate'), "%Y-%m-%d %H:%M:%S")
+                beneficiaryNumber = self.request.data.get('beneficiarynumber').replace(" ", "")
+
+                try:
+                    merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
+                except MerchantPoint.DoesNotExist:
+                    return Response({"error": "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+
+                # Calculating expiration date of the otp (expected validation date + 1 hour)
+                expirie = expectie + timedelta(hours=1)
+                try:
+                    beneficiary = Customer.objects.get(phonenumber=beneficiaryNumber)
+                except Customer.DoesNotExist:
+                    return Response({"error": "Le numéro du bénéficiaire entré est introuvable"},
+                                    status=status.HTTP_404_NOT_FOUND)
+
+                # Saving OTP
                 while True:
                     # Generating OTP
                     code = self.generateOtp()
                     try:
                         otpie = Otp.objects.get(code=code)
-                        if otpie.wasverified == True or (otpie.wasverified == False and otpie.expirationdate < datetime.now()):
+                        if otpie.wasverified == True or (
+                                otpie.wasverified == False and otpie.expirationdate < timezone.now()):
                             otpie.expirationdate = expirie
                             otpie.wasverified = False
                             otpie.save()
                             break
-                        elif otpie.wasverified == False and otpie.expirationdate >= datetime.now():
+                        elif otpie.wasverified == False and otpie.expirationdate >= timezone.now():
                             continue
                     except Otp.DoesNotExist:
-                        otpie = Otp(code=code, expirationdate=expirie.strftime("%Y-%m-%d %H:%M:%S"))
+                        otpie = Otp(code=code, expirationdate=expirie)
                         print(otpie.expirationdate)
                         otpie.save()
                         break
 
-                #Sending Otp
+                # Sending Otp
                 message = sendOtp(otpie.code, number, expirie.strftime("%d-%b-%Y %H:%M:%S"))
                 if message != "queued":
                     otpie.delete()
-                    return Response({"error" : "Une erreur est survenue. Veuillez réessayer"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    return Response({"error": "Une erreur est survenue. Veuillez réessayer"},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 else:
-                    #Saving transaction
-                    serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint, amount=amount,
-                                    expectedvalidationdate=expectie.strftime("%Y-%m-%d %H:%M:%S"), otp=otpie, customernumber=number, wasvalidatedbycustomer=True)
-                    return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
+                    # Saving transaction
+                    serializer.save(type='Depot', beneficiarynumber=beneficiary, merchantpoint=merchantPoint,
+                                    amount=amount,
+                                    expectedvalidationdate=expectie, otp=otpie,
+                                    customernumber=number, wasvalidatedbycustomer=True)
+                    return Response({"message": "Transaction initiée avec succès. Le code de confirmation sera envoyé"
+                                                " par SMS au " + number},
+                                    status=status.HTTP_201_CREATED)
+
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        elif (transaction_type == 'Retrait'):
-            # Calculating expiration date of the otp (expected validation date + 1 hour)
-            expirie = expectie + timedelta(hours=1)
-            secret = self.request.data.get('secret').replace(" ", "")
+        elif transaction_type == 'Retrait':
+            serializer = WithdrawalSerializer(data=request.data)
 
-            try:
-                customer = Customer.objects.get(phonenumber=number)
-            except Customer.DoesNotExist:
-                return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
+            if serializer.is_valid():
+                amount = self.request.data.get('amount')
+                merchantPoint = self.request.data.get('merchantpoint')
+                number = self.request.data.get('customernumber').replace(" ", "")
+                expectie = datetime.strptime(self.request.data.get('expectedvalidationdate'), "%Y-%m-%d %H:%M:%S")
 
-            serializer = TransactionSerializer(data=request.data)
-            if(serializer.is_valid()):
+                try:
+                    merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
+                except MerchantPoint.DoesNotExist:
+                    return Response({"error": "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
+
+                # Calculating expiration date of the otp (expected validation date + 1 hour)
+                expirie = expectie + timedelta(hours=1)
+                secret = self.request.data.get('secret').replace(" ", "")
+
+                try:
+                    customer = Customer.objects.get(phonenumber=number)
+                except Customer.DoesNotExist:
+                    return Response({"error": "Le numéro de client entré est introuvable"},
+                                    status=status.HTTP_404_NOT_FOUND)
+
                 if check_password(secret, customer.secret):
 
                     if customer.balance > float(amount):
@@ -291,33 +309,40 @@ class TransactionInitiation(generics.CreateAPIView):
                             # Saving transaction
                             serializer.save(type='Retrait', merchantpoint=merchantPoint,
                                             amount=amount, customernumber=customer.phonenumber,
-                                            expectedvalidationdate=expectedDate, otp=otpie)
+                                            expectedvalidationdate=expectie, otp=otpie)
 
                             return Response({"message" : "Transaction initiée avec succès. Le code de confirmation sera envoyé par SMS au " + number}, status=status.HTTP_201_CREATED)
                     else:
                         return Response({"error": "Solde insuffisant. Cette transaction ne peut être initiée"}, status=status.HTTP_406_NOT_ACCEPTABLE)
                 else:
                     return Response({"error" : "Le code secret entré est erroné"}, status=status.HTTP_404_NOT_FOUND)
+
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        elif transaction_type == 'Paiement':
+            serializer = PaymentSerializer(data=request.data)
 
+            if(serializer.is_valid()):
+                amount = self.request.data.get('amount')
+                merchantPoint = self.request.data.get('merchantpoint')
+                number = self.request.data.get('customernumber').replace(" ", "")
 
-        elif (transaction_type == 'Paiement'):
-            expectie = datetime.now()
-            expirie = expectie + timedelta(minutes=3)
-            secret = self.request.data.get('secret').replace(" ", "")
+                try:
+                    merchantPoint = MerchantPoint.objects.get(id=merchantPoint)
+                except MerchantPoint.DoesNotExist:
+                    return Response({"error": "Ce point marchand n'existe pas"}, status=status.HTTP_404_NOT_FOUND)
 
-            try:
-                customer = Customer.objects.get(phonenumber=number)
-            except Customer.DoesNotExist:
-                return Response({"error" : "Le numéro de client entré est introuvable"}, status=status.HTTP_404_NOT_FOUND)
+                expirie = timezone.now() + timedelta(minutes=3)
+                secret = self.request.data.get('secret').replace(" ", "")
 
-            serializer = TransactionSerializer(data=request.data)
-            print(request.data)
-            if (serializer.is_valid()):
+                try:
+                    customer = Customer.objects.get(phonenumber=number)
+                except Customer.DoesNotExist:
+                    return Response({"error": "Le numéro de client entré est introuvable"},
+                                    status=status.HTTP_404_NOT_FOUND)
+
                 if check_password(secret, customer.secret):
-
                     if customer.balance > float(amount):
                         # Saving OTP
                         while True:
@@ -358,6 +383,10 @@ class TransactionInitiation(generics.CreateAPIView):
             else:
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        else:
+            return Response({"error": "Type de transaction inconnu"}, status=status.HTTP_404_NOT_FOUND)
+
+
 
 @api_view(['POST'])
 def validateTransaction(request):
@@ -387,7 +416,7 @@ def validateTransaction(request):
                         beneficiary.save()
 
                         transaction.wasvalidatedbymerchant = True
-                        transaction.validationdate = datetime.now()
+                        transaction.validationdate = timezone.now()
                         transaction.save()
 
                         otpie.wasverified = True
@@ -459,7 +488,7 @@ def validateTransaction(request):
                                 merchantpoint.save()
 
                                 transaction.wasvalidatedbymerchant = True
-                                transaction.validationdate = datetime.now()
+                                transaction.validationdate = timezone.now()
                                 transaction.save()
 
                                 otpie.wasverified = True
@@ -499,11 +528,15 @@ def customerValidation(request):
         otpie = Otp.objects.get(code=codie)
         if otpie.wasverified == True:
             return Response({"message": "Ce code a déjà été vérifié"}, status=status.HTTP_406_NOT_ACCEPTABLE)
-        elif otpie.expirationdate < datetime.now():
+        elif otpie.expirationdate < timezone.now():
             return Response({"error": "Ce code a expiré"}, status=status.HTTP_406_NOT_ACCEPTABLE)
         else:
             try:
-                transaction = Transaction.objects.get(otp=otpie, wasvalidatedbycustomer=False, type="Retrait")
+                transaction = Transaction.objects.get(otp=otpie, type="Retrait")
+
+                if transaction.wasvalidatedbymerchant == False:
+                    return Response({"error" : "La transaction n'a pas encore été validée par le marchand."}, status=status.HTTP_406_NOT_ACCEPTABLE)
+
                 try:
                     customer = Customer.objects.get(phonenumber=transaction.customernumber)
                     if check_password(secret, customer.secret):
@@ -526,7 +559,7 @@ def customerValidation(request):
                                 merchantpoint.save()
 
                                 transaction.wasvalidatedbycustomer = True
-                                transaction.validationdate = datetime.now()
+                                transaction.validationdate = timezone.now()
                                 transaction.save()
 
                                 otpie.wasverified = True
@@ -557,3 +590,7 @@ class TransactionDetail(generics.RetrieveAPIView):
     serializer_class = TransactionListSerializer
     permission_classes = [IsMerchantOrReadOnly]
     queryset = Transaction.objects.all()
+
+
+
+

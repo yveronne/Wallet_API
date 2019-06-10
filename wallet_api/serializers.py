@@ -56,10 +56,23 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class TransactionSerializer(serializers.ModelSerializer):
+class DepositSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ('type', 'amount', 'expectedvalidationdate')
+        fields = ('type', 'amount', 'expectedvalidationdate', 'beneficiarynumber', 'merchantpoint', 'customernumber')
+
+
+class WithdrawalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ('type', 'amount', 'expectedvalidationdate', 'customernumber', 'merchantpoint')
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = ('type', 'amount', 'merchantpoint')
+
 
 class TransactionListSerializer(serializers.ModelSerializer):
     class Meta:
